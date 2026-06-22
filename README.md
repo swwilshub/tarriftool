@@ -3,6 +3,11 @@
 A home energy tariff optimiser and what-if sandbox for Octopus customers
 with solar, a home battery, an EV and an air-source heat pump.
 
+**Interactive browser version**: `docs/index.html` — a self-contained JS
+port of the model that runs entirely client-side. Push to GitHub and
+enable Pages (**Settings → Pages → Branch: main, Folder: /docs**) for a
+hosted version with sliders for every lever.
+
 It answers two questions:
 
 1. **Scenario sandbox** — *"if I add 5 kWh of battery, does that let me stay

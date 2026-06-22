@@ -1,0 +1,92 @@
+:root {
+  --bg: #0f1115;
+  --panel: #181c24;
+  --panel2: #1f2430;
+  --border: #2a3040;
+  --fg: #e6e8ee;
+  --muted: #8a93a6;
+  --accent: #4f9;
+  --warn: #fa3;
+  --bad: #f55;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 14px; line-height: 1.45;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code { background: #0008; padding: 1px 4px; border-radius: 3px; font-size: 12.5px; }
+
+header {
+  padding: 18px 24px; border-bottom: 1px solid var(--border);
+  display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 12px;
+}
+header h1 { margin: 0; font-size: 18px; letter-spacing: 0.2px; }
+header h1 span { color: var(--muted); font-weight: 400; margin-left: 8px; }
+header .links { color: var(--muted); font-size: 13px; }
+
+main {
+  display: grid; grid-template-columns: 340px 1fr; gap: 0;
+  min-height: calc(100vh - 60px);
+}
+@media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+
+aside.controls {
+  background: var(--panel); border-right: 1px solid var(--border);
+  padding: 16px; overflow-y: auto;
+}
+aside.controls h2 { font-size: 13px; margin: 16px 0 8px;
+  text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+aside.controls h2:first-child { margin-top: 0; }
+
+.control { margin-bottom: 10px; }
+.control label { display: flex; justify-content: space-between; font-size: 12.5px; margin-bottom: 4px; }
+.control label .val { color: var(--accent); font-variant-numeric: tabular-nums; }
+.control input[type=range] { width: 100%; accent-color: var(--accent); }
+
+.tariff-toggles label { display: block; padding: 4px 0; cursor: pointer; }
+.tariff-toggles input { accent-color: var(--accent); margin-right: 8px; vertical-align: middle; }
+.tariff-toggles .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+
+section.results { padding: 16px 20px; overflow-y: auto; }
+.headline { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px; margin-bottom: 16px; }
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+  padding: 12px 14px; }
+.card .label { font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; }
+.card .value { font-size: 20px; font-weight: 600; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.card .sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.value.positive { color: var(--accent); }
+.value.negative { color: var(--warn); }
+
+.panel { background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+  padding: 14px 16px; margin-bottom: 16px; }
+.panel h3 { font-size: 13px; text-transform: uppercase; letter-spacing: 1px;
+  color: var(--muted); margin: 0 0 10px; font-weight: 600; }
+
+.chart-wrap { position: relative; height: 260px; }
+.chart-wrap.tall { height: 340px; }
+
+table.compact { width: 100%; border-collapse: collapse; font-size: 12.5px;
+  font-variant-numeric: tabular-nums; }
+table.compact th, table.compact td {
+  text-align: right; padding: 4px 8px; border-bottom: 1px solid var(--border);
+}
+table.compact th:first-child, table.compact td:first-child { text-align: left; }
+table.compact th { color: var(--muted); font-weight: 500; }
+table.compact tr:last-child td { border-bottom: none; }
+table.compact td.winner { color: var(--accent); font-weight: 600; }
+table.compact td.cheapest { background: rgba(79, 255, 153, 0.07); }
+
+.schedule { display: flex; gap: 1px; flex-wrap: wrap; margin-top: 4px; }
+.schedule .m { padding: 6px 8px; background: var(--panel2); border-radius: 3px;
+  font-size: 11.5px; min-width: 80px; text-align: center; }
+.schedule .m .name { color: var(--accent); font-weight: 600; }
+
+.assumptions { color: var(--muted); font-size: 12px; line-height: 1.6; }
+.assumptions strong { color: var(--fg); }
+
+footer { padding: 16px 24px; border-top: 1px solid var(--border);
+  color: var(--muted); font-size: 12px; }

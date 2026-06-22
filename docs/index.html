@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>tarriftool — UK home energy tariff sandbox</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header>
+  <h1>tarriftool <span>Octopus tariff what-if sandbox</span></h1>
+  <div class="links">
+    Runs entirely in your browser. No data leaves this page.
+    &nbsp;·&nbsp;
+    <a href="https://github.com/swwilshub/tarriftool" target="_blank" rel="noopener">repo</a>
+  </div>
+</header>
+
+<main>
+
+<aside class="controls">
+
+  <h2>Battery</h2>
+  <div class="control">
+    <label>Usable capacity <span class="val"><span id="v-batteryKwh">15</span> kWh</span></label>
+    <input id="batteryKwh" type="range" min="0" max="30" step="1" value="15">
+  </div>
+  <div class="control">
+    <label>Max charge / discharge <span class="val"><span id="v-batteryKw">6</span> kW</span></label>
+    <input id="batteryKw" type="range" min="2" max="12" step="0.5" value="6">
+  </div>
+  <div class="control">
+    <label>Round-trip efficiency <span class="val"><span id="v-batteryRte">90</span>%</span></label>
+    <input id="batteryRte" type="range" min="0.7" max="0.98" step="0.01" value="0.9">
+  </div>
+
+  <h2>Heat pump</h2>
+  <div class="control">
+    <label>Rated input <span class="val"><span id="v-hpRatedKw">9</span> kW</span></label>
+    <input id="hpRatedKw" type="range" min="2" max="16" step="0.5" value="9">
+  </div>
+  <div class="control">
+    <label>SCOP <span class="val"><span id="v-scop">4.0</span></span></label>
+    <input id="scop" type="range" min="2.0" max="5.0" step="0.1" value="4.0">
+  </div>
+  <div class="control">
+    <label>Demand: kWh / HDD <span class="val"><span id="v-hpGain">5.5</span></span></label>
+    <input id="hpGain" type="range" min="0" max="12" step="0.1" value="5.5">
+  </div>
+
+  <h2>Base load</h2>
+  <div class="control">
+    <label>Annual kWh (appliances/HW/lights) <span class="val"><span id="v-baseAnnualKwh">3000</span></span></label>
+    <input id="baseAnnualKwh" type="range" min="1000" max="6000" step="100" value="3000">
+  </div>
+
+  <h2>Solar</h2>
+  <div class="control">
+    <label>Array size <span class="val"><span id="v-solarKwp">9</span> kWp</span></label>
+    <input id="solarKwp" type="range" min="0" max="20" step="0.5" value="9">
+  </div>
+  <div class="control">
+    <label>Yield <span class="val"><span id="v-solarYield">950</span> kWh/kWp/yr</span></label>
+    <input id="solarYield" type="range" min="700" max="1100" step="25" value="950">
+  </div>
+
+  <h2>EV</h2>
+  <div class="control">
+    <label>Weekly miles <span class="val"><span id="v-evWeeklyMiles">70</span></span></label>
+    <input id="evWeeklyMiles" type="range" min="0" max="500" step="10" value="70">
+  </div>
+  <div class="control">
+    <label>Efficiency <span class="val"><span id="v-evMiPerKwh">2.2</span> mi/kWh</span></label>
+    <input id="evMiPerKwh" type="range" min="1.5" max="5" step="0.1" value="2.2">
+  </div>
+  <div class="control">
+    <label>Home charger <span class="val"><span id="v-evChargeKw">7</span> kW</span></label>
+    <input id="evChargeKw" type="range" min="3" max="22" step="0.5" value="7">
+  </div>
+
+  <h2>Tariffs to compare</h2>
+  <div id="tariffToggles" class="tariff-toggles"></div>
+
+  <h2>Advanced</h2>
+  <div class="control">
+    <label>HP base temp <span class="val"><span id="v-hpBaseTempC">15.5</span> °C</span></label>
+    <input id="hpBaseTempC" type="range" min="12" max="18" step="0.5" value="15.5">
+  </div>
+
+</aside>
+
+<section class="results">
+
+  <div class="headline">
+    <div class="card">
+      <div class="label">Best single tariff (all year)</div>
+      <div id="hd-best" class="value">…</div>
+      <div id="hd-bestCost" class="sub">…</div>
+    </div>
+    <div class="card">
+      <div class="label">Seasonal-switch total</div>
+      <div id="hd-switch" class="value">…</div>
+      <div id="hd-saving" class="sub">…</div>
+    </div>
+    <div class="card">
+      <div class="label">Annual import</div>
+      <div id="hd-import" class="value">…</div>
+      <div id="hd-export" class="sub">…</div>
+    </div>
+    <div class="card">
+      <div class="label">Demand (tariff-independent)</div>
+      <div id="hd-demand" class="value" style="font-size:14px; line-height:1.5;">…</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>Annual cost per tariff (same demand profile)</h3>
+    <div class="chart-wrap"><canvas id="annualChart"></canvas></div>
+  </div>
+
+  <div class="panel">
+    <h3>Monthly cost (£ / month)</h3>
+    <div class="chart-wrap tall"><canvas id="monthlyChart"></canvas></div>
+  </div>
+
+  <div class="panel">
+    <h3>Seasonal switch schedule</h3>
+    <div id="scheduleStrip" class="schedule"></div>
+    <div id="scheduleNote" class="assumptions" style="margin-top:10px;"></div>
+  </div>
+
+  <div class="panel">
+    <h3>Monthly winner table</h3>
+    <div style="overflow-x:auto;"><table id="monthlyTable" class="compact"></table></div>
+  </div>
+
+  <div class="panel">
+    <h3>Sensitivity (tornado) — biggest levers first</h3>
+    <div class="chart-wrap tall"><canvas id="tornadoChart"></canvas></div>
+    <div class="assumptions" style="margin-top:8px;">
+      Each bar shows the £ swing of the <em>best tariff per scenario</em> when that
+      single parameter moves from its low value to its high value, holding all
+      other parameters at their current slider position.
+    </div>
+  </div>
+
+  <div class="panel">
+    <h3>Spend breakdown by category</h3>
+    <div style="overflow-x:auto;"><table id="breakdownTable" class="compact"></table></div>
+  </div>
+
+  <div class="panel">
+    <h3>What this model assumes</h3>
+    <div class="assumptions">
+      <p><strong>Demand / dispatch decoupling.</strong> The tariff-independent
+      layer (base load + heat pump from heating-degree-days + solar from a
+      clear-sky envelope + EV daily kWh) is fixed across every tariff
+      comparison. Only the dispatch — when to draw from grid, when to charge
+      EV, when to cycle the battery — changes per tariff. This is what makes
+      the comparison honest; historic smart-meter data would already be
+      tariff-shifted by your old battery/EV schedule.</p>
+      <p><strong>Dispatch.</strong> Per day, slots below the 35th percentile
+      price are "cheap-tier": battery charges to capacity at max rate, EV
+      fills its daily kWh need from cheapest slots first. In non-cheap slots
+      the battery discharges to cover residual load. Solar always serves load
+      first, then surplus charges battery, then exports.</p>
+      <p><strong>Tariff rates</strong> are mid-2024 approximations. For
+      accurate £ figures use the Python CLI (<code>tarriftool fetch-rates</code>)
+      to pull live Octopus rates; this browser build is for scenario
+      exploration. Standing charges are flat 50p/day; export rate flat 15p/kWh.</p>
+      <p><strong>Limitations.</strong> No Agile half-hourly real prices (uses a
+      sinusoidal proxy); HP can't pre-heat into cheap windows independently of
+      battery; UK weather is a smooth sinusoid (no cold-snap variability); no
+      DST/leap-year handling.</p>
+    </div>
+  </div>
+
+</section>
+
+</main>
+
+<footer>
+  Built as a static page; all computation runs in your browser via plain JS. Source on
+  <a href="https://github.com/swwilshub/tarriftool" target="_blank" rel="noopener">GitHub</a>.
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="model.js"></script>
+<script src="app.js"></script>
+
+</body>
+</html>
