@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tarriftool"
+version = "0.1.0"
+description = "Home energy tariff optimiser and what-if sandbox (Octopus / Enphase)."
+requires-python = ">=3.10"
+dependencies = [
+  "numpy>=1.26",
+  "pandas>=2.1",
+  "pyyaml>=6.0",
+  "python-dotenv>=1.0",
+  "requests>=2.31",
+  "matplotlib>=3.8",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+tarriftool = "tarriftool.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

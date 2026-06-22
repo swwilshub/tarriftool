@@ -1,0 +1,52 @@
+# Home asset & demand parameters.
+# These describe what the home PHYSICALLY needs and what assets are available.
+# They are tariff-independent: the same numbers are used regardless of which
+# tariff is being simulated. (See README: "Demand / dispatch decoupling".)
+
+battery:
+  usable_kwh: 15.0
+  max_charge_kw: 6.0
+  max_discharge_kw: 6.0
+  round_trip_efficiency: 0.90
+  initial_soc_frac: 0.5
+
+ev:
+  battery_kwh: 100.0
+  home_charge_kw: 7.0
+  weekly_miles: 70.0
+  efficiency_mi_per_kwh: 2.2
+  # The dispatch engine treats EV daily kWh need as fixed energy that must be
+  # delivered each day, with the *timing* free to be optimised by tariff.
+
+heat_pump:
+  rated_input_kw: 9.0
+  scop: 4.0
+  # Heat demand model:
+  #   heat_kwh_per_day = max(0, base_temp_c - mean_outdoor_temp_c) * gain_kwh_per_hdd
+  #   electrical_kwh_per_day = heat_kwh / scop
+  # Tune gain_kwh_per_hdd so annual elec matches your real Octopus / Enphase
+  # data (see `tarriftool calibrate`). Defaults give ~3000 kWh/yr electrical
+  # for a moderately-insulated UK home.
+  base_temp_c: 15.5
+  gain_kwh_per_hdd: 5.5
+  diurnal_shape: morning_evening   # or: flat
+
+base_load:
+  # Everything not HP / EV / solar: appliances, lighting, standby, hot water.
+  annual_kwh: 3000.0
+  diurnal_shape: uk_residential    # or: flat
+
+solar:
+  kwp: 9.0
+  azimuth_deg: 180
+  tilt_deg: 35
+  # UK central-England yield is ~900-1000 kWh per kWp per year south-facing.
+  yield_kwh_per_kwp_year: 950.0
+
+location:
+  latitude: 51.5
+  longitude: -0.1
+  timezone: Europe/London
+
+simulation:
+  year: 2024
