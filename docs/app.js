@@ -72,7 +72,7 @@ let playing = false;
 let playRaf = null;
 let playPrevTs = 0;
 
-const DAYS = 365;
+// `DAYS` is declared in model.js (shared global on the page).
 const MONTH_DAYS = [31,28,31,30,31,30,31,31,30,31,30,31];
 
 function dayToDate(day0) {
