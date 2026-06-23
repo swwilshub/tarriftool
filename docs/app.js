@@ -353,6 +353,22 @@ function renderResults(cfg) {
   }));
   lastResults = results;
   lastTariffNames = tariffNames;
+
+  // Lock the y-axis to the full-year extent across every enabled tariff
+  // (with 5% padding), so the slopes stay honest as the year unfolds and
+  // the fan-out from the baseline cost is visible from day 1.
+  let yMin = 0, yMax = 0;
+  for (const k of tariffNames) {
+    const cum = results[k].cumulative;
+    for (let d = 0; d < cum.length; d++) {
+      if (cum[d] < yMin) yMin = cum[d];
+      if (cum[d] > yMax) yMax = cum[d];
+    }
+  }
+  const range = yMax - yMin || 1;
+  cumChart.options.scales.y.min = yMin - 0.05 * range;
+  cumChart.options.scales.y.max = yMax + 0.05 * range;
+
   applyDayClip(currentDay);
 
   // Tornado
