@@ -62,6 +62,90 @@ function buildTariffToggles() {
   }
 }
 
+// ---------- Tariff rate editor ----------
+
+const FIELD_LABELS = {
+  standard: "Standard (p/kWh)",
+  cheap: "Cheap window (p/kWh)",
+  peak: "Peak (p/kWh)",
+  standing: "Standing charge (p/day)",
+  export: "Export (p/kWh)",
+  mean: "Agile mean (p/kWh)",
+  amp: "Agile peak amplitude (p/kWh)",
+  winterPremium: "Agile winter premium (p/kWh)",
+};
+
+const TARIFFS_LS_KEY = "tarriftool_tariffs_v1";
+
+function saveTariffOverrides() {
+  const obj = {};
+  for (const [k, v] of Object.entries(Tarriftool.TARIFFS)) {
+    obj[k] = { ...v.rates };
+  }
+  try { localStorage.setItem(TARIFFS_LS_KEY, JSON.stringify(obj)); } catch (e) {}
+}
+
+function loadTariffOverrides() {
+  let raw;
+  try { raw = localStorage.getItem(TARIFFS_LS_KEY); } catch (e) { return; }
+  if (!raw) return;
+  try {
+    const obj = JSON.parse(raw);
+    for (const [k, rates] of Object.entries(obj)) {
+      if (Tarriftool.TARIFFS[k]) {
+        Object.assign(Tarriftool.TARIFFS[k].rates, rates);
+      }
+    }
+  } catch (e) {}
+}
+
+function buildTariffEditor() {
+  const wrap = document.getElementById("tariffEditor");
+  wrap.innerHTML = "";
+  for (const [key, info] of Object.entries(Tarriftool.TARIFFS)) {
+    const block = document.createElement("div");
+    block.className = "tariff-editor-block";
+    block.style.borderLeftColor = info.color;
+    const title = document.createElement("div");
+    title.className = "tariff-editor-title";
+    title.innerHTML = `<span class="swatch" style="background:${info.color}"></span>${info.label}`;
+    block.appendChild(title);
+    for (const field of info.editable) {
+      const row = document.createElement("div");
+      row.className = "tariff-editor-row";
+      const lbl = document.createElement("label");
+      lbl.textContent = FIELD_LABELS[field] || field;
+      const inp = document.createElement("input");
+      inp.type = "number";
+      inp.step = "0.01";
+      inp.value = info.rates[field];
+      inp.dataset.tariff = key;
+      inp.dataset.field = field;
+      inp.addEventListener("input", onTariffRateInput);
+      row.appendChild(lbl);
+      row.appendChild(inp);
+      block.appendChild(row);
+    }
+    wrap.appendChild(block);
+  }
+}
+
+function onTariffRateInput(e) {
+  const v = parseFloat(e.target.value);
+  if (isNaN(v)) return;
+  const { tariff, field } = e.target.dataset;
+  Tarriftool.TARIFFS[tariff].rates[field] = v;
+  saveTariffOverrides();
+  scheduleRefresh();
+}
+
+function onResetTariffs() {
+  Tarriftool.resetTariffsToDefaults();
+  try { localStorage.removeItem(TARIFFS_LS_KEY); } catch (e) {}
+  buildTariffEditor();  // re-render inputs with default values
+  scheduleRefresh();
+}
+
 // ---------- Charts ----------
 
 let annualChart, monthlyChart, tornadoChart, cumChart;
@@ -400,7 +484,10 @@ function scheduleRefresh() {
 }
 
 function init() {
+  loadTariffOverrides();
   buildTariffToggles();
+  buildTariffEditor();
+  document.getElementById("resetTariffsBtn").addEventListener("click", onResetTariffs);
   makeCharts();
   initPlayback();
   for (const f of FIELDS) {

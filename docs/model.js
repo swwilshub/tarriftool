@@ -132,47 +132,125 @@ function buildDemand(idx, temp, cfg) {
 }
 
 // ---------- Tariffs ----------
+//
+// Every rate lives in the .rates object on each TARIFFS entry. The UI
+// mutates these in place and persists overrides in localStorage, so a
+// region with very different prices (e.g. Octopus Go at 9.5p / 31.67p /
+// 63.44p standing) is supported by typing in the numbers from your
+// account. `tariffPrices()` and dispatch both read from .rates so the
+// model picks up changes immediately.
+
+const TARIFF_DEFAULTS = {
+  intelligent_go: {
+    label: "Intelligent Octopus Go",
+    color: "#4f9",
+    kind: "iog",
+    windows: { cheapStart: 23.5, cheapEnd: 5.5 },  // wraps midnight
+    rates: { standard: 25.0, cheap: 7.0, standing: 50.0, export: 15.0 },
+    editable: ["standard", "cheap", "standing", "export"],
+  },
+  go: {
+    label: "Octopus Go",
+    color: "#9c4",
+    kind: "go",
+    windows: { cheapStart: 0.5, cheapEnd: 5.5 },
+    rates: { standard: 31.67, cheap: 9.5, standing: 63.44, export: 15.0 },
+    editable: ["standard", "cheap", "standing", "export"],
+  },
+  cosy: {
+    label: "Cosy Octopus",
+    color: "#fa3",
+    kind: "cosy",
+    windows: {
+      cheap1: [4.0, 7.0],
+      cheap2: [13.0, 16.0],
+      cheap3: [22.0, 24.0],
+      peak:   [16.0, 19.0],
+    },
+    rates: { standard: 25.0, cheap: 12.0, peak: 39.0, standing: 50.0, export: 15.0 },
+    editable: ["standard", "cheap", "peak", "standing", "export"],
+  },
+  agile: {
+    label: "Octopus Agile (synth.)",
+    color: "#5af",
+    kind: "agile",
+    rates: { mean: 22.0, amp: 14.0, winterPremium: 4.0, standing: 50.0, export: 15.0 },
+    editable: ["mean", "amp", "winterPremium", "standing", "export"],
+  },
+  flat: {
+    label: "Flat baseline",
+    color: "#aaa",
+    kind: "flat",
+    rates: { standard: 24.0, standing: 50.0, export: 15.0 },
+    editable: ["standard", "standing", "export"],
+  },
+};
+
+function cloneTariffDefaults() {
+  const out = {};
+  for (const [k, v] of Object.entries(TARIFF_DEFAULTS)) {
+    out[k] = {
+      label: v.label, color: v.color, kind: v.kind,
+      windows: v.windows ? JSON.parse(JSON.stringify(v.windows)) : undefined,
+      rates: { ...v.rates },
+      editable: v.editable.slice(),
+    };
+  }
+  return out;
+}
+
+// Live TARIFFS object — start from defaults, but the UI may mutate
+// TARIFFS[x].rates in place at any time. tariffPrices() reads from these.
+const TARIFFS = cloneTariffDefaults();
 
 function tariffPrices(name, idx) {
-  // returns Float32Array of length N with p/kWh
+  const t = TARIFFS[name];
+  const r = t.rates;
   const p = new Float32Array(N);
-  if (name === "intelligent_go") {
+  if (t.kind === "iog") {
+    const cs = t.windows.cheapStart, ce = t.windows.cheapEnd;
     for (let i = 0; i < N; i++) {
       const h = idx.hod[i];
-      p[i] = (h >= 23.5 || h < 5.5) ? 7.0 : 25.0;
+      const inWin = cs < ce ? (h >= cs && h < ce) : (h >= cs || h < ce);
+      p[i] = inWin ? r.cheap : r.standard;
     }
-  } else if (name === "go") {
+  } else if (t.kind === "go") {
+    const cs = t.windows.cheapStart, ce = t.windows.cheapEnd;
     for (let i = 0; i < N; i++) {
       const h = idx.hod[i];
-      p[i] = (h >= 0.5 && h < 5.5) ? 8.5 : 28.0;
+      const inWin = cs < ce ? (h >= cs && h < ce) : (h >= cs || h < ce);
+      p[i] = inWin ? r.cheap : r.standard;
     }
-  } else if (name === "cosy") {
+  } else if (t.kind === "cosy") {
+    const w = t.windows;
     for (let i = 0; i < N; i++) {
       const h = idx.hod[i];
-      let v = 25.0;
-      if ((h >= 4 && h < 7) || (h >= 13 && h < 16) || (h >= 22 && h < 24)) v = 12.0;
-      else if (h >= 16 && h < 19) v = 39.0;
+      let v = r.standard;
+      if ((h >= w.cheap1[0] && h < w.cheap1[1]) ||
+          (h >= w.cheap2[0] && h < w.cheap2[1]) ||
+          (h >= w.cheap3[0] && h < w.cheap3[1])) v = r.cheap;
+      else if (h >= w.peak[0] && h < w.peak[1]) v = r.peak;
       p[i] = v;
     }
-  } else if (name === "agile") {
+  } else if (t.kind === "agile") {
     for (let i = 0; i < N; i++) {
-      const base = 22.0 + 14.0 * Math.cos(2 * Math.PI * (idx.hod[i] - 17.5) / 24);
-      const seasonal = 4.0 * Math.cos(2 * Math.PI * (idx.doy[i] - 15) / 365);
+      const base = r.mean + r.amp * Math.cos(2 * Math.PI * (idx.hod[i] - 17.5) / 24);
+      const seasonal = r.winterPremium * Math.cos(2 * Math.PI * (idx.doy[i] - 15) / 365);
       p[i] = base + seasonal;
     }
-  } else if (name === "flat") {
-    p.fill(24.0);
+  } else if (t.kind === "flat") {
+    p.fill(r.standard);
   }
   return p;
 }
 
-const TARIFFS = {
-  intelligent_go: { label: "Intelligent Octopus Go", standing: 50.0, export: 15.0, color: "#4f9" },
-  go:             { label: "Octopus Go",             standing: 50.0, export: 15.0, color: "#9c4" },
-  cosy:           { label: "Cosy Octopus",           standing: 50.0, export: 15.0, color: "#fa3" },
-  agile:          { label: "Octopus Agile (synth.)", standing: 50.0, export: 15.0, color: "#5af" },
-  flat:           { label: "Flat 24p baseline",      standing: 50.0, export: 15.0, color: "#aaa" },
-};
+function resetTariffsToDefaults() {
+  const fresh = cloneTariffDefaults();
+  for (const k of Object.keys(TARIFFS)) {
+    TARIFFS[k].rates = fresh[k].rates;
+    if (TARIFFS[k].windows && fresh[k].windows) TARIFFS[k].windows = fresh[k].windows;
+  }
+}
 
 // ---------- Dispatch ----------
 
@@ -187,6 +265,8 @@ function percentile(arr, p) {
 function dispatch(demand, idx, cfg, tariffName) {
   const prices = tariffPrices(tariffName, idx);
   const tInfo = TARIFFS[tariffName];
+  const standingP = tInfo.rates.standing;
+  const exportP = tInfo.rates.export;
 
   const cap = cfg.batteryKwh;
   const eff = Math.sqrt(cfg.batteryRte);
@@ -285,29 +365,28 @@ function dispatch(demand, idx, cfg, tariffName) {
   let importCostP = 0, exportRevP = 0, importKwh = 0, exportKwh = 0;
   for (let i = 0; i < N; i++) {
     importCostP += gridImport[i] * prices[i];
-    exportRevP += gridExport[i] * tInfo.export;
+    exportRevP += gridExport[i] * exportP;
     importKwh += gridImport[i];
     exportKwh += gridExport[i];
   }
-  const standingP = DAYS * tInfo.standing;
-  const annualCost = (importCostP + standingP - exportRevP) / 100;
+  const totalStandingP = DAYS * standingP;
+  const annualCost = (importCostP + totalStandingP - exportRevP) / 100;
 
   // Monthly aggregates: cost incl. pro-rata standing.
   const monthly = new Float64Array(12);
   const daily = new Float64Array(DAYS);
   const dailyImport = new Float64Array(DAYS);
   const dailyExport = new Float64Array(DAYS);
-  const monthDays = [31,28,31,30,31,30,31,31,30,31,30,31];
   for (let d = 0; d < DAYS; d++) {
     const off = d * HH_PER_DAY;
     let dc = 0;
     for (let s = 0; s < HH_PER_DAY; s++) {
       const i = off + s;
-      dc += (gridImport[i] * prices[i] - gridExport[i] * tInfo.export) / 100;
+      dc += (gridImport[i] * prices[i] - gridExport[i] * exportP) / 100;
       dailyImport[d] += gridImport[i];
       dailyExport[d] += gridExport[i];
     }
-    dc += tInfo.standing / 100;
+    dc += standingP / 100;
     daily[d] = dc;
     monthly[idx.month[off] - 1] += dc;
   }
@@ -334,7 +413,7 @@ function dispatch(demand, idx, cfg, tariffName) {
     annualCost,
     importCostGbp,
     exportRevGbp: exportRevP / 100,
-    standingGbp: standingP / 100,
+    standingGbp: totalStandingP / 100,
     importKwh,
     exportKwh,
     monthly,
@@ -436,4 +515,7 @@ function tornado(baseCfg, tariffNames) {
 }
 
 // Expose
-window.Tarriftool = { TARIFFS, simulateAll, seasonalSwap, tornado };
+window.Tarriftool = {
+  TARIFFS, TARIFF_DEFAULTS, simulateAll, seasonalSwap, tornado,
+  resetTariffsToDefaults,
+};
