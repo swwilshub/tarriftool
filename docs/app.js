@@ -64,7 +64,28 @@ function buildTariffToggles() {
 
 // ---------- Charts ----------
 
-let annualChart, monthlyChart, tornadoChart;
+let annualChart, monthlyChart, tornadoChart, cumChart;
+let lastResults = null;
+let lastTariffNames = [];
+let currentDay = 0;
+let playing = false;
+let playRaf = null;
+let playPrevTs = 0;
+
+const DAYS = 365;
+const MONTH_DAYS = [31,28,31,30,31,30,31,31,30,31,30,31];
+
+function dayToDate(day0) {
+  // day0 is 0-indexed day of year, non-leap
+  let d = day0;
+  for (let m = 0; m < 12; m++) {
+    if (d < MONTH_DAYS[m]) {
+      return `${d + 1} ${MONTH_NAMES[m]}`;
+    }
+    d -= MONTH_DAYS[m];
+  }
+  return "31 Dec";
+}
 
 function makeCharts() {
   const common = {
@@ -91,6 +112,46 @@ function makeCharts() {
     options: {
       ...common,
       scales: { ...common.scales, y: { ...common.scales.y, ticks: { color: "#8a93a6", callback: (v) => fmtGbp(v) } } },
+    },
+  });
+
+  // Cumulative cost curve — runs across all 365 days.
+  cumChart = new Chart(document.getElementById("cumChart"), {
+    type: "line",
+    data: { labels: Array.from({length: DAYS}, (_, i) => i + 1), datasets: [] },
+    options: {
+      ...common,
+      animation: false,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        ...common.plugins,
+        tooltip: {
+          callbacks: {
+            title: (items) => items.length ? `Day ${items[0].label} — ${dayToDate(parseInt(items[0].label,10) - 1)}` : "",
+            label: (ctx) => `${ctx.dataset.label}: ${fmtGbp(ctx.parsed.y)}`,
+          },
+        },
+      },
+      scales: {
+        x: {
+          ticks: {
+            color: "#8a93a6",
+            callback: function(value) {
+              const day = parseInt(this.getLabelForValue(value), 10);
+              // show first of month
+              let acc = 1;
+              for (let m = 0; m < 12; m++) {
+                if (day === acc) return MONTH_NAMES[m];
+                acc += MONTH_DAYS[m];
+              }
+              return "";
+            },
+            autoSkip: false, maxRotation: 0,
+          },
+          grid: { color: "#2a3040" },
+        },
+        y: { ticks: { color: "#8a93a6", callback: (v) => fmtGbp(v) }, grid: { color: "#2a3040" } },
+      },
     },
   });
 
@@ -198,6 +259,18 @@ function renderResults(cfg) {
   html += "</tbody>";
   tbl.innerHTML = html;
 
+  // Cumulative chart (full curves; visibility window controlled by scrub).
+  cumChart.data.datasets = tariffNames.map((k) => ({
+    label: Tarriftool.TARIFFS[k].label,
+    data: Array.from(results[k].cumulative),
+    borderColor: Tarriftool.TARIFFS[k].color,
+    backgroundColor: Tarriftool.TARIFFS[k].color + "20",
+    tension: 0.1, pointRadius: 0, borderWidth: 2,
+  }));
+  lastResults = results;
+  lastTariffNames = tariffNames;
+  applyDayClip(currentDay);
+
   // Tornado
   tornadoChart.data.labels = tdf.map((r) => `${r.label}  (${r.low}→${r.high})`);
   tornadoChart.data.datasets[0].data = tdf.map((r) => r.swing);
@@ -223,6 +296,96 @@ function renderResults(cfg) {
   bt.innerHTML = bh;
 }
 
+// ---------- Year playback ----------
+
+function applyDayClip(day) {
+  if (!lastResults || !cumChart) return;
+  // Reveal cumulative line up to `day` only — the rest is null so Chart.js
+  // doesn't draw it. This is the "year unfolding" effect.
+  for (let di = 0; di < cumChart.data.datasets.length; di++) {
+    const tariff = lastTariffNames[di];
+    const cum = lastResults[tariff].cumulative;
+    const arr = new Array(DAYS).fill(null);
+    for (let d = 0; d <= day && d < DAYS; d++) arr[d] = cum[d];
+    cumChart.data.datasets[di].data = arr;
+  }
+  cumChart.update("none");
+  renderTicker(day);
+  document.getElementById("dayLabel").textContent = `Day ${day + 1} — ${dayToDate(day)}`;
+  document.getElementById("dayScrub").value = day;
+}
+
+function renderTicker(day) {
+  if (!lastResults) return;
+  // Rank tariffs by cumulative-to-date, then show daily delta.
+  const rows = lastTariffNames.map((k) => {
+    const r = lastResults[k];
+    const total = r.cumulative[day];
+    const delta = r.daily[day];
+    return { name: k, total, delta, label: Tarriftool.TARIFFS[k].label, color: Tarriftool.TARIFFS[k].color };
+  }).sort((a, b) => a.total - b.total);
+  const leadName = rows[0].name;
+  const wrap = document.getElementById("cumTicker");
+  wrap.innerHTML = "";
+  for (const r of rows) {
+    const div = document.createElement("div");
+    div.className = "ticker-row" + (r.name === leadName ? " leading" : "");
+    div.style.borderLeftColor = r.color;
+    const deltaSign = r.delta >= 0 ? "+" : "−";
+    div.innerHTML = `<div class="name">${r.label}</div>
+                     <div class="total">${fmtGbp(r.total)}</div>
+                     <div class="delta">today ${deltaSign}${fmtGbp(Math.abs(r.delta))}</div>`;
+    wrap.appendChild(div);
+  }
+}
+
+function setPlaying(p) {
+  playing = p;
+  const btn = document.getElementById("playBtn");
+  btn.textContent = p ? "Pause" : "Play";
+  btn.classList.toggle("playing", p);
+  if (p) {
+    playPrevTs = performance.now();
+    playRaf = requestAnimationFrame(tickPlayback);
+  } else if (playRaf) {
+    cancelAnimationFrame(playRaf);
+    playRaf = null;
+  }
+}
+
+function tickPlayback(ts) {
+  if (!playing) return;
+  const dt = (ts - playPrevTs) / 1000;
+  playPrevTs = ts;
+  const speed = parseFloat(document.getElementById("speedSel").value);
+  currentDay += dt * speed;
+  if (currentDay >= DAYS) {
+    currentDay = DAYS - 1;
+    applyDayClip(Math.floor(currentDay));
+    setPlaying(false);
+    return;
+  }
+  applyDayClip(Math.floor(currentDay));
+  playRaf = requestAnimationFrame(tickPlayback);
+}
+
+function initPlayback() {
+  document.getElementById("playBtn").addEventListener("click", () => {
+    if (currentDay >= DAYS - 1) currentDay = 0;
+    setPlaying(!playing);
+  });
+  document.getElementById("resetBtn").addEventListener("click", () => {
+    setPlaying(false);
+    currentDay = 0;
+    applyDayClip(0);
+  });
+  document.getElementById("dayScrub").addEventListener("input", (e) => {
+    setPlaying(false);
+    currentDay = parseInt(e.target.value, 10);
+    applyDayClip(currentDay);
+  });
+}
+
 // ---------- Debounced refresh ----------
 
 let pending = false;
@@ -239,10 +402,13 @@ function scheduleRefresh() {
 function init() {
   buildTariffToggles();
   makeCharts();
+  initPlayback();
   for (const f of FIELDS) {
     document.getElementById(f).addEventListener("input", scheduleRefresh);
   }
   scheduleRefresh();
+  // Start the year at day 0 with the reveal already applied.
+  applyDayClip(0);
 }
 
 window.addEventListener("DOMContentLoaded", init);

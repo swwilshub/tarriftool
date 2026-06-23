@@ -115,6 +115,32 @@
   </div>
 
   <div class="panel">
+    <h3>Watch the year unfold</h3>
+    <div class="playback-controls">
+      <button id="playBtn" class="btn">Play</button>
+      <button id="resetBtn" class="btn">Reset</button>
+      <label>Speed
+        <select id="speedSel">
+          <option value="2">2 days/s</option>
+          <option value="7">1 wk/s</option>
+          <option value="30" selected>1 month/s</option>
+          <option value="90">3 months/s</option>
+        </select>
+      </label>
+      <span id="dayLabel" class="day-label">Day 1 — 1 Jan</span>
+      <input id="dayScrub" type="range" min="0" max="364" step="1" value="0" class="scrub">
+    </div>
+    <div class="chart-wrap tall"><canvas id="cumChart"></canvas></div>
+    <div id="cumTicker" class="cum-ticker"></div>
+    <div class="assumptions" style="margin-top:8px;">
+      Each line is the running total £ spent on that tariff up to that day of
+      the year (including standing charge, net of export revenue). Where two
+      lines cross is where one tariff overtakes another in cumulative cost —
+      a candidate switch date.
+    </div>
+  </div>
+
+  <div class="panel">
     <h3>Annual cost per tariff (same demand profile)</h3>
     <div class="chart-wrap"><canvas id="annualChart"></canvas></div>
   </div>

@@ -92,7 +92,10 @@ function buildDemand(idx, temp, cfg) {
     }
   }
 
-  // Solar: clear-sky cosine envelope, UK seasonal scaling, normalised to kwp * yield.
+  // Solar: clear-sky cosine intra-day shape, then per-month rescale to match
+  // a UK SE-England reference monthly distribution (south-facing 35° array).
+  // The reference accounts for cloud cover + sun angle in a single calibrated
+  // step — much more honest in winter than a smooth sin envelope.
   const lat = 51.5;
   const solar = new Float32Array(N);
   for (let i = 0; i < N; i++) {
@@ -106,14 +109,22 @@ function buildDemand(idx, temp, cfg) {
       inst = Math.cos(Math.PI * dh / (2 * halfDay));
       if (inst < 0) inst = 0;
     }
-    const seasonalEnv = 0.25 + 0.75 * Math.max(0, Math.sin(2 * Math.PI * (idx.doy[i] - 80) / 365));
-    solar[i] = inst * seasonalEnv;
+    solar[i] = inst;  // dimensionless instantaneous-power proxy
   }
-  let total = 0;
-  for (let i = 0; i < N; i++) total += solar[i] * 0.5;
-  if (total > 0) {
-    const scale = (cfg.solarKwp * cfg.solarYield) / total;
-    for (let i = 0; i < N; i++) solar[i] = solar[i] * 0.5 * scale;
+  // UK SE-England 9 kWp south-facing 35°, % of annual yield per month.
+  // Source: PVGIS-style reference.
+  const UK_MONTHLY_PCT = [3.0, 5.0, 9.0, 12.0, 12.0, 13.0, 13.0, 11.0, 9.0, 6.0, 4.0, 3.0];
+  const monthInstSum = new Float64Array(12);
+  for (let i = 0; i < N; i++) monthInstSum[idx.month[i] - 1] += solar[i];
+  const annualKwh = cfg.solarKwp * cfg.solarYield;
+  const monthScale = new Float64Array(12);
+  for (let m = 0; m < 12; m++) {
+    monthScale[m] = monthInstSum[m] > 0
+      ? (UK_MONTHLY_PCT[m] / 100) * annualKwh / monthInstSum[m]
+      : 0;
+  }
+  for (let i = 0; i < N; i++) {
+    solar[i] = solar[i] * monthScale[idx.month[i] - 1];
   }
 
   const evDailyKwh = (cfg.evWeeklyMiles / cfg.evMiPerKwh) / 7;
@@ -283,13 +294,22 @@ function dispatch(demand, idx, cfg, tariffName) {
 
   // Monthly aggregates: cost incl. pro-rata standing.
   const monthly = new Float64Array(12);
+  const daily = new Float64Array(DAYS);
+  const dailyImport = new Float64Array(DAYS);
+  const dailyExport = new Float64Array(DAYS);
   const monthDays = [31,28,31,30,31,30,31,31,30,31,30,31];
-  for (let i = 0; i < N; i++) {
-    const m = idx.month[i] - 1;
-    monthly[m] += (gridImport[i] * prices[i] - gridExport[i] * tInfo.export) / 100;
-  }
-  for (let m = 0; m < 12; m++) {
-    monthly[m] += monthDays[m] * tInfo.standing / 100;
+  for (let d = 0; d < DAYS; d++) {
+    const off = d * HH_PER_DAY;
+    let dc = 0;
+    for (let s = 0; s < HH_PER_DAY; s++) {
+      const i = off + s;
+      dc += (gridImport[i] * prices[i] - gridExport[i] * tInfo.export) / 100;
+      dailyImport[d] += gridImport[i];
+      dailyExport[d] += gridExport[i];
+    }
+    dc += tInfo.standing / 100;
+    daily[d] = dc;
+    monthly[idx.month[off] - 1] += dc;
   }
 
   // Spend by category — share-weighted attribution of import cost.
@@ -305,6 +325,11 @@ function dispatch(demand, idx, cfg, tariffName) {
   let battLoss = 0;
   for (let i = 0; i < N; i++) battLoss += battIn[i] - battOut[i];
 
+  // Cumulative cost across the year (one entry per day).
+  const cumulative = new Float64Array(DAYS);
+  let acc = 0;
+  for (let d = 0; d < DAYS; d++) { acc += daily[d]; cumulative[d] = acc; }
+
   return {
     annualCost,
     importCostGbp,
@@ -313,6 +338,10 @@ function dispatch(demand, idx, cfg, tariffName) {
     importKwh,
     exportKwh,
     monthly,
+    daily,
+    cumulative,
+    dailyImport,
+    dailyExport,
     spendBase: importCostGbp * totalBase / totalLoad,
     spendHp: importCostGbp * totalHp / totalLoad,
     spendEv: importCostGbp * totalEv / totalLoad,
